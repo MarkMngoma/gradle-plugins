@@ -1,0 +1,96 @@
+ext {
+  mybatisGeneratorJar = "mybatis-generator-core-${mybatisGeneratorVersion}.jar"
+  mybatisGeneratorConfig = "${projectDir}/src/main/resources/mybatis/generatorConfig.xml"
+
+  mariaDbJar = "mariadb-java-client-${jdbcMariadbVersion}.jar"
+  mariaDbJarPath = "${projectDir}/libs/${mariaDbJar}"
+}
+
+task downloadMyBatisGeneratorJar {
+  group = 'MyBatis'
+  description = 'Populating MyBatis Generator JAR artifact'
+
+  def downloadUrl = "${mavenRepository}/org/mybatis/generator/mybatis-generator-core/${mybatisGeneratorVersion}/${mybatisGeneratorJar}"
+  def jarFile = file("${projectDir}/libs/${mybatisGeneratorJar}")
+
+  outputs.file jarFile
+
+  doLast {
+    if (!jarFile.exists()) {
+      println "Downloading MyBatis Generator JAR..."
+      ant.get(src: downloadUrl, dest: jarFile, verbose: true)
+    }
+  }
+}
+
+task downloadMariaDbDriverJar {
+  group = 'MyBatis'
+  description = 'Checking for JDBC driver in classpath'
+
+  def downloadUrl = "${mavenRepository}/org/mariadb/jdbc/mariadb-java-client/${jdbcMariadbVersion}/${mariaDbJar}"
+  def jarFile = file(mariaDbJarPath)
+
+  outputs.file jarFile
+
+  doLast {
+    if (!jarFile.exists()) {
+      println "Downloading MariaDB JDBC Driver JAR..."
+      ant.get(src: downloadUrl, dest: jarFile, verbose: true)
+    }
+  }
+}
+
+task updateMyBatisConfig {
+  group = 'MyBatis'
+  description = 'Updating generatorConfig.xml with classpath entry for the JDBC driver'
+
+  doLast {
+    def configFile = file(mybatisGeneratorConfig)
+    if (!configFile.exists()) {
+      throw new GradleException("Configuration file not found: ${mybatisGeneratorConfig}")
+    }
+
+    def configContent = configFile.text
+    def classPathEntry = "<classPathEntry location=\"${mariaDbJarPath.replace('\\', '/')}\" />"
+
+    if (!configContent.contains(classPathEntry)) {
+      println "Adding MariaDB classpath entry to generatorConfig.xml..."
+      configContent = configContent.replaceFirst(
+        "(?<=<generatorConfiguration>)",
+        "\n    ${classPathEntry}"
+      )
+      configFile.text = configContent
+    } else {
+      println "MariaDB classpath entry already exists in generatorConfig.xml"
+    }
+  }
+}
+
+task runMyBatisGenerator(type: Exec) {
+  group = 'MyBatis'
+  description = 'Runs the MyBatis Generator using the provided generatorConfig.xml'
+
+  def mybatisJarPath = "${projectDir}/libs/${mybatisGeneratorJar}"
+
+  inputs.files mybatisGeneratorConfig, mybatisJarPath, mariaDbJarPath
+  outputs.dir "${projectDir}/src/main/java"
+
+  doFirst {
+    if (!file(mybatisGeneratorConfig).exists()) {
+      throw new GradleException("Configuration file not found: ${mybatisGeneratorConfig}")
+    }
+    if (!file(mybatisJarPath).exists()) {
+      throw new GradleException("MyBatis Generator JAR not found: ${mybatisJarPath}")
+    }
+    if (!file(mariaDbJarPath).exists()) {
+      throw new GradleException("MariaDB JDBC Driver JAR not found: ${mariaDbJarPath}")
+    }
+  }
+
+  commandLine 'java',
+    '-cp', "${mybatisJarPath}:${mariaDbJarPath}",
+    '-jar', mybatisJarPath,
+    '-configfile', mybatisGeneratorConfig
+}
+
+runMyBatisGenerator.dependsOn downloadMyBatisGeneratorJar, downloadMariaDbDriverJar, updateMyBatisConfig

@@ -1,0 +1,62 @@
+ext {
+    deploymentTemplate = "${projectDir}/src/main/integration/cloud/deployment.yaml"
+    deploymentOutput = "${buildDir}/k8s/deployment.yaml"
+    deployScriptTemplate = "${projectDir}/src/main/integration/cloud/deploy.sh"
+    deployScriptOutput = "${buildDir}/k8s/deploy.sh"
+}
+
+task generateDeploymentYaml {
+    group = 'Deployment'
+    description = 'Generating deployment.yaml'
+
+    inputs.file deploymentTemplate
+    outputs.file deploymentOutput
+
+    doLast {
+        def template = file(deploymentTemplate).text
+        def outputFile = file(deploymentOutput)
+
+        def populatedContent = template
+            .replace('${project.artifactId}', project.name)
+            .replace('${project.version}', project.version)
+            .replace('${server.port}', project.hasProperty('serverPort') ? project.serverPort : '8080')
+
+        outputFile.text = populatedContent
+        println "deployment.yaml generated at: ${deploymentOutput}"
+    }
+}
+
+task generateDeployScript {
+    group = 'Deployment'
+    description = 'Generating deploy.sh'
+
+    inputs.file deployScriptTemplate
+    outputs.file deployScriptOutput
+
+    doLast {
+        def template = file(deployScriptTemplate).text
+        def outputFile = file(deployScriptOutput)
+
+        def populatedContent = template
+            .replace('${project.artifactId}', project.name)
+            .replace('${project.version}', project.version)
+
+        outputFile.text = populatedContent
+        outputFile.setExecutable(true)
+        println "deploy.sh generated at: ${deployScriptOutput}"
+    }
+}
+
+task deployToKubernetes(type: Exec) {
+    group = 'Deployment'
+    description = 'Deploying to Kubernetes...'
+
+    dependsOn generateDeploymentYaml, generateDeployScript
+
+    commandLine 'sh', deployScriptOutput
+    doLast {
+        println "Deployment applied successfully."
+    }
+}
+
+deployToKubernetes.dependsOn buildDockerImage

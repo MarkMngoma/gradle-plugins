@@ -1,0 +1,41 @@
+ext {
+    dockerImageName = "${dockerRegistry}/${dockerRepository}/${project.name}:${project.version}"
+    dockerFileTemplate = "${projectDir}/src/main/integration/cloud/Dockerfile"
+    dockerFileOutput = "${buildDir}/docker/Dockerfile"
+    jarFile = "${buildDir}/libs/${project.name}-${project.version}.jar"
+}
+
+task generateDockerfile {
+    group = 'Container'
+    description = 'Generating Dockerfile'
+
+    inputs.file dockerFileTemplate
+    outputs.file dockerFileOutput
+
+    doLast {
+        def template = file(dockerFileTemplate).text
+        def outputFile = file(dockerFileOutput)
+
+        def populatedContent = template
+            .replace('${project.name}', project.name)
+            .replace('${project.version}', project.version)
+            .replace('${jar.file}', jarFile)
+
+        outputFile.text = populatedContent
+        println "Dockerfile generated at: ${dockerFileOutput}"
+    }
+}
+
+task buildDockerImage(type: Exec) {
+    group = 'Container'
+    description = 'Building Docker image using the generated Dockerfile'
+
+    dependsOn generateDockerfile
+
+    commandLine 'docker', 'build', '-t', dockerImageName, '-f', dockerFileOutput, '.'
+    doLast {
+        println "Docker image built: ${dockerImageName}"
+    }
+}
+
+buildDockerImage.dependsOn build
