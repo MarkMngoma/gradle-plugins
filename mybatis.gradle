@@ -93,4 +93,26 @@ task runMyBatisGenerator(type: Exec) {
     '-configfile', mybatisGeneratorConfig
 }
 
+task cleanMyBatisClassPathEntry {
+  group = 'MyBatis'
+  description = 'Removes the classPathEntry from generatorConfig.xml after generation'
+
+  doLast {
+    def configFile = file(mybatisGeneratorConfig)
+    if (configFile.exists()) {
+      def configContent = configFile.text
+      def updatedContent = configContent.replaceAll(
+        /<classPathEntry.*?\/>/, ''
+      )
+      configFile.text = updatedContent
+      println "Removed classPathEntry from generatorConfig.xml"
+    } else {
+      println "generatorConfig.xml not found. Skipping cleanup."
+    }
+  }
+}
+
+cleanMyBatisClassPathEntry.mustRunAfter runMyBatisGenerator
+runMyBatisGenerator.finalizedBy cleanMyBatisClassPathEntry
+
 runMyBatisGenerator.dependsOn downloadMyBatisGeneratorJar, downloadMariaDbDriverJar, updateMyBatisConfig
